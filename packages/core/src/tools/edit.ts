@@ -170,7 +170,8 @@ Expectation for required parameters:
     if (oldString === '' && !isNewFile) {
       return currentContent;
     }
-    return currentContent.replaceAll(oldString, newString);
+    // 使用全局正则表达式替换所有匹配项，兼容 ES2020
+    return currentContent.replace(new RegExp(oldString.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), newString);
   }
 
   /**

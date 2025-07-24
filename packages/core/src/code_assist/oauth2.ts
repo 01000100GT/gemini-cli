@@ -397,7 +397,8 @@ async function fetchAndCacheUserInfo(client: OAuth2Client): Promise<void> {
       return;
     }
 
-    const userInfo = await response.json();
+    // 为 userInfo 添加类型断言，确保可以访问 email 属性
+    const userInfo = await response.json() as { email?: string };
     if (userInfo.email) {
       await cacheGoogleAccount(userInfo.email);
     }
