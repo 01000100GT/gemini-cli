@@ -38,15 +38,46 @@ export function isStructuredError(error: unknown): error is StructuredError {
 }
 
 export function isProQuotaExceededError(error: unknown): boolean {
-  // Check for Pro quota exceeded errors by looking for the specific pattern
+  // Check for Pro quota exceeded errors by looking for various patterns
   // This will match patterns like:
   // - "Quota exceeded for quota metric 'Gemini 2.5 Pro Requests'"
   // - "Quota exceeded for quota metric 'Gemini 2.5-preview Pro Requests'"
+  // - Errors containing "gemini-2.5-pro" or "gemini-2.0-pro" model references
+  // - Free tier quota errors for Pro models
   // We use string methods instead of regex to avoid ReDoS vulnerabilities
 
-  const checkMessage = (message: string): boolean =>
-    message.includes("Quota exceeded for quota metric 'Gemini") &&
-    message.includes("Pro Requests'");
+  const checkMessage = (message: string): boolean => {
+    const lowerMessage = message.toLowerCase();
+    
+    // Original pattern check
+    if (message.includes("Quota exceeded for quota metric 'Gemini") &&
+        message.includes("Pro Requests'")) {
+      return true;
+    }
+    
+    // Check for Pro model references in quota errors
+    if (lowerMessage.includes('quota') || lowerMessage.includes('exceeded')) {
+      if (lowerMessage.includes('gemini-2.5-pro') || 
+          lowerMessage.includes('gemini-2.0-pro') ||
+          lowerMessage.includes('gemini-pro')) {
+        return true;
+      }
+    }
+    
+    // Check for free tier quota errors that mention Pro models
+    if (lowerMessage.includes('free_tier') && 
+        (lowerMessage.includes('gemini-2.5-pro') || lowerMessage.includes('gemini-2.0-pro'))) {
+      return true;
+    }
+    
+    // Check for specific quota metrics related to Pro models
+    if (lowerMessage.includes('generate_content_free_tier') && 
+        (lowerMessage.includes('gemini-2.5-pro') || lowerMessage.includes('gemini-2.0-pro'))) {
+      return true;
+    }
+    
+    return false;
+  };
 
   if (typeof error === 'string') {
     return checkMessage(error);

@@ -93,10 +93,10 @@ export async function retryWithBackoff<T>(
     } catch (error) {
       const errorStatus = getErrorStatus(error);
 
-      // Check for Pro quota exceeded error first - immediate fallback for OAuth users
+      // Check for Pro quota exceeded error first - immediate fallback for OAuth and API Key users
       if (
         errorStatus === 429 &&
-        authType === AuthType.LOGIN_WITH_GOOGLE &&
+        (authType === AuthType.LOGIN_WITH_GOOGLE || authType === AuthType.USE_GEMINI) &&
         isProQuotaExceededError(error) &&
         onPersistent429
       ) {
@@ -119,10 +119,10 @@ export async function retryWithBackoff<T>(
         }
       }
 
-      // Check for generic quota exceeded error (but not Pro, which was handled above) - immediate fallback for OAuth users
+      // Check for generic quota exceeded error (but not Pro, which was handled above) - immediate fallback for OAuth and API Key users
       if (
         errorStatus === 429 &&
-        authType === AuthType.LOGIN_WITH_GOOGLE &&
+        (authType === AuthType.LOGIN_WITH_GOOGLE || authType === AuthType.USE_GEMINI) &&
         !isProQuotaExceededError(error) &&
         isGenericQuotaExceededError(error) &&
         onPersistent429
@@ -153,11 +153,11 @@ export async function retryWithBackoff<T>(
         consecutive429Count = 0;
       }
 
-      // If we have persistent 429s and a fallback callback for OAuth
+      // If we have persistent 429s and a fallback callback for OAuth and API Key users
       if (
         consecutive429Count >= 2 &&
         onPersistent429 &&
-        authType === AuthType.LOGIN_WITH_GOOGLE
+        (authType === AuthType.LOGIN_WITH_GOOGLE || authType === AuthType.USE_GEMINI)
       ) {
         try {
           const fallbackModel = await onPersistent429(authType, error);
@@ -234,7 +234,37 @@ export function getErrorStatus(error: unknown): number | undefined {
         return response.status;
       }
     }
+    
+    // Check for nested error in cause property
+    if ('cause' in error && typeof error.cause === 'object' && error.cause !== null) {
+      const causeStatus = getErrorStatus(error.cause);
+      if (causeStatus !== undefined) {
+        return causeStatus;
+      }
+    }
   }
+  
+  // Try to extract status code from error message
+  if (error instanceof Error && error.message) {
+    // Look for JSON content in error message
+    const jsonMatch = error.message.match(/\{[^}]*"status"\s*:\s*(\d+)[^}]*\}/);
+    if (jsonMatch) {
+      const status = parseInt(jsonMatch[1], 10);
+      if (!isNaN(status)) {
+        return status;
+      }
+    }
+    
+    // Look for HTTP status codes in message
+    const statusMatch = error.message.match(/\b(4\d{2}|5\d{2})\b/);
+    if (statusMatch) {
+      const status = parseInt(statusMatch[1], 10);
+      if (!isNaN(status)) {
+        return status;
+      }
+    }
+  }
+  
   return undefined;
 }
 
